@@ -2,24 +2,32 @@ using Identity.App.Data;
 using Identity.App.Models;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using System.Security.Principal;
+using Identity.App.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
+var services = builder.Services;
 
-// Add services to the container.
-builder.Services.AddRazorPages();
-builder.Services.AddAuthentication();
+var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json")
+                .Build();
 
-builder.Services.AddControllers();
-builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.GetTempPath()));
+var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
 
-builder.Services.AddDbContext<ApplicationDataContext>(options =>
-    options.UseSqlServer("Data Source=.\\SQLEXPRESS;Initial Catalog=IdentityAppDb;Integrated Security=True")
-    );
+services.AddTransient<IDbConnectionInterface, DatabaseConnectionFactory>()
+        .AddTransient<IEmailSender, EmailSender>();
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
+services.AddRazorPages();
+services.AddAuthentication();
+services.AddControllers();
+
+services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.GetTempPath()));
+
+services.AddDbContext<ApplicationDataContext>(options => options.UseSqlServer(connectionString));
+
+services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
                 .AddEntityFrameworkStores<ApplicationDataContext>()
                 .AddDefaultTokenProviders();
 
@@ -36,7 +44,6 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LogoutPath = "/Account/Logout";
     options.AccessDeniedPath = "/Account/AccessDenied";
 });
-
 
 builder.Services.AddMvc();
 
@@ -82,7 +89,5 @@ app.MapControllerRoute(
     );
 
 app.UseAuthorization();
-
 app.MapRazorPages();
-
 app.Run();
