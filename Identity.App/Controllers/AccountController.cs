@@ -3,7 +3,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Principal;
+using Microsoft.Data.SqlClient;
+using Dapper;
+using SendGrid;
+using SendGrid.Helpers.Mail;
+using Microsoft.AspNetCore.Identity.UI.Services;
+using Microsoft.Extensions.Options;
 
 namespace Identity.App.Controllers
 {
@@ -12,15 +17,24 @@ namespace Identity.App.Controllers
         private readonly UserManager<ApplicationUser> _UserManager;
         private readonly SignInManager<ApplicationUser> _SignInManager;
 
-        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
+        public AccountController(UserManager<ApplicationUser> userManager,
+                                 SignInManager<ApplicationUser> signInManager)
         {
             _UserManager = userManager;
             _SignInManager = signInManager;
         }
 
+        public SqlConnection CreateConnection()
+        {
+            var connectionClass = new GetConfiguration();
 
+            var connectionString = connectionClass.GetConnectionString();
 
-        //REGISTRO
+            SqlConnection connection = new SqlConnection(connectionString);
+
+            return connection;
+        }
+
         [HttpGet]
         [AllowAnonymous]
         [Route("Account/Register")]
@@ -70,9 +84,6 @@ namespace Identity.App.Controllers
             return View(model);
         }
 
-
-
-        //LOGIN
         [HttpGet]
         [AllowAnonymous]
         [Route("Account/Login")]
@@ -117,9 +128,6 @@ namespace Identity.App.Controllers
             return View(model);
         }
 
-
-
-        //LOGOUT
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Route("Account/Logout")]
@@ -130,52 +138,73 @@ namespace Identity.App.Controllers
             return RedirectToAction("", "");
         }
 
-
-
-        //REDEFINIÇÃO DE SENHA
         [HttpGet]
-        [Route("Account/ForgotPassword")]
-        public IActionResult ForgotPassword(string? returnUrl = null)
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword(string returnUrl)
         {
             ViewData["ReturnUrl"] = returnUrl;
+
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
             return View();
         }
 
         [HttpPost]
         [Route("Account/ForgotPassword")]
-        public IActionResult ForgotPassword(ForgotPasswordViewModel model)
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
-            // TODO: fazer consulta na tabela AspnetUsers para verificar se o email está cadastrado no sistema.
+            var connection = CreateConnection();
 
-            // TODO: se estiver, (enviar email com o link da pagina de recuperação) OU (Enviar email com token para validar o acesso na tela de recuperação)
+            using (connection)
+            {
+                string queryString = $"SELECT * FROM AspNetUsers WHERE NormalizedUserName in (@Param)";
 
-            return View();
+                var queryResult = connection.Query<ApplicationUser>(queryString, new { Param = model.Email });
+
+                if (queryResult is not null)
+                {
+                    var validationCode = Convert.ToString(GetRedefinitionValidationCode());
+
+                    if (validationCode.Count() == 4)
+                    {
+                        var emailSender = new EmailSender();
+
+                        var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
+
+                        if (hasEmailSent)
+                        {
+                            var successEmailSentResponse = new ForgotPasswordViewModel()
+                            {
+                                Status = 0,
+                                Message = "E-Mail enviado com sucesso!"
+                            };
+
+                            return View(successEmailSentResponse);
+                        }
+                    }
+
+                    var errorEmailSentResponse = new ForgotPasswordViewModel()
+                    {
+                        Status = 1,
+                        Message = "Erro! E-Mail de recuperação não pode ser enviado"
+                    };
+
+                    return View(errorEmailSentResponse);
+                }
+            }
+
+            return View(model);
         }
 
-        [HttpGet]
-        [Route("Account/ForgotPassword")]
-        public IActionResult PasswordRedefinition(string? returnUrl = null)
+        private int GetRedefinitionValidationCode()
         {
-            ViewData["ReturnUrl"] = returnUrl;
+            var randomClass = new Random();
 
-            return View();
+            var ValidateCode = Convert.ToInt32(randomClass.Next(1000, 9999));
+
+            return ValidateCode;
         }
 
-        [HttpPost]
-        [Route("Account/ForgotPassword")]
-        public IActionResult PasswordRedefinition(PasswordRedefinitionViewModel model)
-        {
-            // TODO: Refinir senhas no banco de dados.
-
-            // TODO: Ativar Action de login
-
-            return View();
-        }
-
-
-
-        //REDIRECT
         private IActionResult RedirectToLocal(string returnUrl)
         {
             if (Url.IsLocalUrl(returnUrl))
@@ -186,6 +215,88 @@ namespace Identity.App.Controllers
             {
                 return RedirectToAction("Index", "Home");
             }
+        }
+    }
+
+    public class EmailSender : IEmailSender
+    {
+        private AuthMessageSenderOptions? Options { get; }
+
+        public EmailSender()
+        {
+
+        }
+
+        public EmailSender(IOptions<AuthMessageSenderOptions> optionsAccessor)
+        {
+            Options = optionsAccessor.Value;
+        }
+
+        public async Task<bool> SetEmailSend(string userEmail, string validationCode)
+        {
+            var sendGridApiKey = Environment.GetEnvironmentVariable("IDENTITY_APP_KEY_API", EnvironmentVariableTarget.User);
+
+            var email = new SendGridMessage()
+            {
+                From = new EmailAddress("gabrileao38@gmail.com", "Gabriel"),
+                Subject = "Email teste",
+                PlainTextContent = $"Aqui está o seu código de recuperação de senha: {validationCode}",
+                HtmlContent = "Html teste"
+            };
+
+            email.AddTo(new EmailAddress(userEmail, "Nome teste"));
+
+            var client = new SendGridClient(sendGridApiKey);
+
+            var emailResponse = await client.SendEmailAsync(email);
+
+            if (emailResponse.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public Task SendEmailAsync(string email, string subject, string htmlMessage)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class AuthMessageSenderOptions
+    {
+        public string? SendGridUser { get; set; }
+        public string? SendGridKey { get; set; }
+    }
+
+    public class GetConfiguration
+    {
+        public string GetApiKey()
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json")
+                .Build();
+
+            return configuration.GetValue<string>("AppSettings:ApiKey");
+        }
+
+        public string GetConnectionString()
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json")
+                .Build();
+
+            var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
+
+            if (!string.IsNullOrEmpty(connectionString))
+            {
+                return connectionString;
+            }
+
+            return "";
         }
     }
 }
