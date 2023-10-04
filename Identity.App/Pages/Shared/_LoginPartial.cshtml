@@ -18,7 +18,7 @@
             </ul>
         </form>
     }
-    else
+    else if (!result)
     {
         <ul class="nav navbar-nav navbar-right">
             <li class="nav-item">
@@ -28,6 +28,10 @@
                 <a class="nav-link text-dark" asp-area="" asp-controller="Account" asp-action="Login">Login</a>
             </li>
         </ul>
+    }
+    else if (Model.SuccessButton)
+    {
+        @Html.Display("PasswordRedefinition");
     }
 }
 

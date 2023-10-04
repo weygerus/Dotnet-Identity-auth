@@ -9,6 +9,7 @@ using SendGrid;
 using SendGrid.Helpers.Mail;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.Extensions.Options;
+using SendGrid.Helpers.Mail.Model;
 
 namespace Identity.App.Controllers
 {
@@ -140,7 +141,7 @@ namespace Identity.App.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> ForgotPassword(string returnUrl)
+        public async Task<IActionResult> ForgotPassword(string? returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
 
@@ -150,6 +151,7 @@ namespace Identity.App.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         [Route("Account/ForgotPassword")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
@@ -167,19 +169,26 @@ namespace Identity.App.Controllers
 
                     if (validationCode.Count() == 4)
                     {
-                        var emailSender = new EmailSender();
-
-                        var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
-
-                        if (hasEmailSent)
+                        if (model.Email is not null)
                         {
-                            var successEmailSentResponse = new ForgotPasswordViewModel()
-                            {
-                                Status = 0,
-                                Message = "E-Mail enviado com sucesso!"
-                            };
+                            var emailSender = new EmailSender();
 
-                            return View(successEmailSentResponse);
+                            var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
+
+                            if (hasEmailSent)
+                            {
+                                var successEmailSentResponse = new ForgotPasswordViewModel()
+                                {
+                                    Status = 0,
+                                    Message = "E-Mail enviado com sucesso!",
+                                    SuccessButton = true
+                                };
+
+                                if (successEmailSentResponse.SuccessButton)
+                                {
+                                    return RedirectToAction("PasswordRedefinition", "Account");
+                                }
+                            }
                         }
                     }
 
@@ -194,6 +203,80 @@ namespace Identity.App.Controllers
             }
 
             return View(model);
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> PasswordRedefinition(string? returnUrl = null)
+        {
+            ViewData["ReturnUrl"] = returnUrl;
+
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+            return View();
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        [AutoValidateAntiforgeryToken]
+        [Route("Account/PasswordRedefinition")]
+        public async Task<IActionResult> PasswordRedefinition(string emailUserName, string newPassword)
+        {
+            using (var connection = this.CreateConnection())
+            {
+                var queryParam = newPassword;
+
+                var queryStringQuote = @"
+                                    {
+                                         <status_option>
+                                        | WITH <set_option> [ ,... ]
+                                        | <cryptographic_credential_option>
+                                    }
+                ";
+
+                var onOff = "{ ON | OFF }";
+
+                var sqlQuery = 
+                        @$"
+
+                ALTER LOGIN UserName {emailUserName}
+                {queryStringQuote}
+
+                <set_option> ::=
+                WITH PasswordHash = '{queryParam}' | hashed_password HASHED
+                [
+                OLD_PASSWORD = 'oldpassword'
+                | <password_option> [<password_option> ]
+                ]
+                | DEFAULT_DATABASE = database
+                | DEFAULT_LANGUAGE = language
+                | NAME = login_name
+                | CHECK_POLICY = {onOff}
+                | CHECK_EXPIRATION = {onOff}
+                | CREDENTIAL = credential_name
+                | NO CREDENTIAL
+
+                        ";
+
+                var queryResult = await connection.QueryFirstOrDefaultAsync<ApplicationUser>(sqlQuery, queryParam);
+
+                var model = new PasswordRedefinitionViewModel();
+
+                if (queryResult is not null)
+                {
+                    model.IsSuccess = true;
+
+                    model.Message = "Senha Alterada com sucesso!";
+
+                    return View();
+                }
+
+                model.IsSuccess = true;
+
+                model.Message = "Erro interno! Infelizmente, o sistema não pode alterar sua senha!";
+
+                return View();
+            }
         }
 
         private int GetRedefinitionValidationCode()
@@ -236,23 +319,30 @@ namespace Identity.App.Controllers
         {
             var sendGridApiKey = Environment.GetEnvironmentVariable("IDENTITY_APP_KEY_API", EnvironmentVariableTarget.User);
 
+            var emailBodyHtmlFilePath = new HtmlContent("~/wwwroot/emailBodyTest.html");
+
+            var emailBodyMessage = @$"{emailBodyHtmlFilePath}";
+
             var email = new SendGridMessage()
             {
-                From = new EmailAddress("gabrileao38@gmail.com", "Gabriel"),
-                Subject = "Email teste",
-                PlainTextContent = $"Aqui está o seu código de recuperação de senha: {validationCode}",
-                HtmlContent = "Html teste"
+                From = new EmailAddress("gabrileao38@gmail.com", "Identity App"),
+                Subject = "Recuperação de senha Identity App",
+                PlainTextContent = null,
+                HtmlContent = emailBodyMessage
             };
 
-            email.AddTo(new EmailAddress(userEmail, "Nome teste"));
+            email.AddTo(new EmailAddress(userEmail, userEmail));
 
             var client = new SendGridClient(sendGridApiKey);
 
             var emailResponse = await client.SendEmailAsync(email);
 
-            if (emailResponse.IsSuccessStatusCode)
+            if (emailResponse is not null)
             {
-                return true;
+                if (emailResponse.IsSuccessStatusCode)
+                {
+                    return true;
+                }
             }
 
             return false;

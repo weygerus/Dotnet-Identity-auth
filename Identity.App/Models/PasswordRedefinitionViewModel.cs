@@ -10,6 +10,15 @@ namespace Identity.App.Models
 
         [Required]
         [DataType(DataType.Password)]
+        [Compare("NewPassword", ErrorMessage = "As senhas precisam ser iguais!")]
         public string? ConfirmNewPassword { get; set; }
+
+        public string? ValidationCodeValidate { get; set; }
+
+        public string? ValidateCode { get; set; }
+
+        public string? Message { get; set; }
+
+        public bool IsSuccess { get; set; }
     }
 }

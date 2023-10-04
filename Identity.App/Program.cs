@@ -84,9 +84,15 @@ app.MapControllerRoute(
     );
 
 app.MapControllerRoute(
+     name: "default",
+     pattern: "{controller=Account}/{action=PasswordRedefinition}"
+    );
+
+app.MapControllerRoute(
     name: "default",
     pattern: "{controller=}/{action=Home}"
     );
+
 
 app.UseAuthorization();
 app.MapRazorPages();
