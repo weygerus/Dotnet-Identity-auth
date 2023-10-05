@@ -8,8 +8,8 @@ using Dapper;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using Microsoft.AspNetCore.Identity.UI.Services;
-using Microsoft.Extensions.Options;
-using SendGrid.Helpers.Mail.Model;
+using Identity.App.Data;
+using Identity.App.Services;
 
 namespace Identity.App.Controllers
 {
@@ -17,23 +17,15 @@ namespace Identity.App.Controllers
     {
         private readonly UserManager<ApplicationUser> _UserManager;
         private readonly SignInManager<ApplicationUser> _SignInManager;
+        private readonly IDbConnectionInterface _Connection;
 
         public AccountController(UserManager<ApplicationUser> userManager,
-                                 SignInManager<ApplicationUser> signInManager)
+                                 SignInManager<ApplicationUser> signInManager,
+                                 IDbConnectionInterface connection)
         {
             _UserManager = userManager;
             _SignInManager = signInManager;
-        }
-
-        public SqlConnection CreateConnection()
-        {
-            var connectionClass = new GetConfiguration();
-
-            var connectionString = connectionClass.GetConnectionString();
-
-            SqlConnection connection = new SqlConnection(connectionString);
-
-            return connection;
+            _Connection = connection;
         }
 
         [HttpGet]
@@ -141,9 +133,18 @@ namespace Identity.App.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> ForgotPassword(string? returnUrl = null)
+        public async Task<IActionResult> ForgotPassword(string message, bool hasEmailSent, string validationCode, string? returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
+
+            ViewData["Message"] = message;
+
+            ViewData["HasEmailSent"] = hasEmailSent;
+
+            if (!string.IsNullOrEmpty(validationCode))
+            {
+                ViewData["ValidationCode"] = validationCode;
+            }
 
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
@@ -155,43 +156,27 @@ namespace Identity.App.Controllers
         [Route("Account/ForgotPassword")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
-            var connection = CreateConnection();
+            var connection = _Connection.CreateConnection();
 
             using (connection)
             {
-                string queryString = $"SELECT * FROM AspNetUsers WHERE NormalizedUserName in (@Param)";
+                string queryString = $"SELECT * FROM AspNetUsers WHERE UserName in (@Param)";
 
                 var queryResult = connection.Query<ApplicationUser>(queryString, new { Param = model.Email });
 
-                if (queryResult is not null)
+                if (queryResult is null)
                 {
-                    var validationCode = Convert.ToString(GetRedefinitionValidationCode());
+                    return View(model);
+                }
 
-                    if (validationCode.Count() == 4)
-                    {
-                        if (model.Email is not null)
-                        {
-                            var emailSender = new EmailSender();
+                var validationCode = GetRedefinitionValidationCode();
 
-                            var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
+                var emailSender = new EmailSender();
 
-                            if (hasEmailSent)
-                            {
-                                var successEmailSentResponse = new ForgotPasswordViewModel()
-                                {
-                                    Status = 0,
-                                    Message = "E-Mail enviado com sucesso!",
-                                    SuccessButton = true
-                                };
+                var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
 
-                                if (successEmailSentResponse.SuccessButton)
-                                {
-                                    return RedirectToAction("PasswordRedefinition", "Account");
-                                }
-                            }
-                        }
-                    }
-
+                if (!hasEmailSent)
+                {
                     var errorEmailSentResponse = new ForgotPasswordViewModel()
                     {
                         Status = 1,
@@ -200,9 +185,16 @@ namespace Identity.App.Controllers
 
                     return View(errorEmailSentResponse);
                 }
-            }
 
-            return View(model);
+                var successEmailSentResponse = new ForgotPasswordViewModel()
+                {
+                    Status = 0,
+                    Message = "E-Mail enviado com sucesso! Por favor valide o código de recuperação enviado: ",
+                    HasEmailSent = true
+                };
+
+                return RedirectToAction("ForgotPassword", new { message = successEmailSentResponse.Message, hasEmailSent = successEmailSentResponse.HasEmailSent, validationCode = validationCode});
+            }
         }
 
         [HttpGet]
@@ -222,7 +214,9 @@ namespace Identity.App.Controllers
         [Route("Account/PasswordRedefinition")]
         public async Task<IActionResult> PasswordRedefinition(string emailUserName, string newPassword)
         {
-            using (var connection = this.CreateConnection())
+            var connection = _Connection.CreateConnection();
+
+            using (connection)
             {
                 var queryParam = newPassword;
 
@@ -279,13 +273,13 @@ namespace Identity.App.Controllers
             }
         }
 
-        private int GetRedefinitionValidationCode()
+        private string GetRedefinitionValidationCode()
         {
             var randomClass = new Random();
 
             var ValidateCode = Convert.ToInt32(randomClass.Next(1000, 9999));
 
-            return ValidateCode;
+            return Convert.ToString(ValidateCode);
         }
 
         private IActionResult RedirectToLocal(string returnUrl)
@@ -301,65 +295,6 @@ namespace Identity.App.Controllers
         }
     }
 
-    public class EmailSender : IEmailSender
-    {
-        private AuthMessageSenderOptions? Options { get; }
-
-        public EmailSender()
-        {
-
-        }
-
-        public EmailSender(IOptions<AuthMessageSenderOptions> optionsAccessor)
-        {
-            Options = optionsAccessor.Value;
-        }
-
-        public async Task<bool> SetEmailSend(string userEmail, string validationCode)
-        {
-            var sendGridApiKey = Environment.GetEnvironmentVariable("IDENTITY_APP_KEY_API", EnvironmentVariableTarget.User);
-
-            var emailBodyHtmlFilePath = new HtmlContent("~/wwwroot/emailBodyTest.html");
-
-            var emailBodyMessage = @$"{emailBodyHtmlFilePath}";
-
-            var email = new SendGridMessage()
-            {
-                From = new EmailAddress("gabrileao38@gmail.com", "Identity App"),
-                Subject = "Recuperação de senha Identity App",
-                PlainTextContent = null,
-                HtmlContent = emailBodyMessage
-            };
-
-            email.AddTo(new EmailAddress(userEmail, userEmail));
-
-            var client = new SendGridClient(sendGridApiKey);
-
-            var emailResponse = await client.SendEmailAsync(email);
-
-            if (emailResponse is not null)
-            {
-                if (emailResponse.IsSuccessStatusCode)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        public Task SendEmailAsync(string email, string subject, string htmlMessage)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class AuthMessageSenderOptions
-    {
-        public string? SendGridUser { get; set; }
-        public string? SendGridKey { get; set; }
-    }
-
     public class GetConfiguration
     {
         public string GetApiKey()
@@ -370,23 +305,6 @@ namespace Identity.App.Controllers
                 .Build();
 
             return configuration.GetValue<string>("AppSettings:ApiKey");
-        }
-
-        public string GetConnectionString()
-        {
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                .AddJsonFile("appsettings.json")
-                .Build();
-
-            var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
-
-            if (!string.IsNullOrEmpty(connectionString))
-            {
-                return connectionString;
-            }
-
-            return "";
         }
     }
 }

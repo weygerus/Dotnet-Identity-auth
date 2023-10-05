@@ -5,18 +5,25 @@ namespace Identity.App.Data
 {
     public class DatabaseConnectionFactory : IDbConnectionInterface
     {
-        private readonly string? _ConnectionString;
-
-        public DatabaseConnectionFactory(IConfiguration configuration)
-        {
-            _ConnectionString = configuration.GetConnectionString("DatabaseConnectionString");
-        }
-
         public IDbConnection CreateConnection()
         {
-            IDbConnection connection = new SqlConnection(_ConnectionString);
+            var connectionString = GetConnectionString();
+
+            IDbConnection connection = new SqlConnection(connectionString);
             connection.Open();
             return connection;
+        }
+
+        private string GetConnectionString()
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json")
+                .Build();
+
+            var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
+
+            return connectionString;
         }
     }
 }
