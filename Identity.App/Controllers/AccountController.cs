@@ -3,13 +3,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Dapper;
-using SendGrid;
-using SendGrid.Helpers.Mail;
-using Microsoft.AspNetCore.Identity.UI.Services;
 using Identity.App.Data;
 using Identity.App.Services;
+using Identity.App.Contract.Repositories;
+using Identity.App.Repositories;
+using Identity.App.Contract.Services;
 
 namespace Identity.App.Controllers
 {
@@ -18,14 +17,20 @@ namespace Identity.App.Controllers
         private readonly UserManager<ApplicationUser> _UserManager;
         private readonly SignInManager<ApplicationUser> _SignInManager;
         private readonly IDbConnectionInterface _Connection;
+        private readonly IAccountRepository _AccountRepository;
+        private readonly IEmailSender _EmailSender;
 
         public AccountController(UserManager<ApplicationUser> userManager,
                                  SignInManager<ApplicationUser> signInManager,
-                                 IDbConnectionInterface connection)
+                                 IDbConnectionInterface connection,
+                                 IAccountRepository accountRepository,
+                                 IEmailSender emailSender)
         {
             _UserManager = userManager;
             _SignInManager = signInManager;
             _Connection = connection;
+            _AccountRepository = accountRepository;
+            _EmailSender = emailSender;
         }
 
         [HttpGet]
@@ -156,45 +161,36 @@ namespace Identity.App.Controllers
         [Route("Account/ForgotPassword")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
-            var connection = _Connection.CreateConnection();
+            var isRegistredUser = _AccountRepository.GetUserByEmail(model.Email);
 
-            using (connection)
+            if (!isRegistredUser)
             {
-                string queryString = $"SELECT * FROM AspNetUsers WHERE UserName in (@Param)";
+                return View(model);
+            }
 
-                var queryResult = connection.Query<ApplicationUser>(queryString, new { Param = model.Email });
+            var validationCode = GetPasswordRedefinitionCode();
 
-                if (queryResult is null)
+            var hasEmailSent = await SetEmailSend(model, validationCode);
+
+            if (!hasEmailSent)
+            {
+                var errorEmailSentResponse = new ForgotPasswordViewModel()
                 {
-                    return View(model);
-                }
-
-                var validationCode = GetRedefinitionValidationCode();
-
-                var emailSender = new EmailSender();
-
-                var hasEmailSent = await emailSender.SetEmailSend(model.Email, validationCode);
-
-                if (!hasEmailSent)
-                {
-                    var errorEmailSentResponse = new ForgotPasswordViewModel()
-                    {
-                        Status = 1,
-                        Message = "Erro! E-Mail de recuperação não pode ser enviado"
-                    };
-
-                    return View(errorEmailSentResponse);
-                }
-
-                var successEmailSentResponse = new ForgotPasswordViewModel()
-                {
-                    Status = 0,
-                    Message = "E-Mail enviado com sucesso! Por favor valide o código de recuperação enviado: ",
-                    HasEmailSent = true
+                    Message = "Erro! E-Mail de recuperação não pode ser enviado"
                 };
 
-                return RedirectToAction("ForgotPassword", new { message = successEmailSentResponse.Message, hasEmailSent = successEmailSentResponse.HasEmailSent, validationCode = validationCode});
+                return View(errorEmailSentResponse);
             }
+
+            var successEmailSentResponse = new ForgotPasswordViewModel()
+            {
+                Message = "E-Mail enviado com sucesso! Por favor valide o código de recuperação enviado: ",
+                HasEmailSent = true
+            };
+
+            return RedirectToAction("ForgotPassword", new { message = successEmailSentResponse.Message,
+                                                            hasEmailSent = successEmailSentResponse.HasEmailSent,
+                                                            validationCode = validationCode });
         }
 
         [HttpGet]
@@ -273,7 +269,21 @@ namespace Identity.App.Controllers
             }
         }
 
-        private string GetRedefinitionValidationCode()
+        private async Task<bool> SetEmailSend(ForgotPasswordViewModel model, string validationCode)
+        {
+            string messageSubject = "Recuperação de senha do AppId!";
+
+            var hasEmailSent = await _EmailSender.SetEmailSend(model.Email, messageSubject, validationCode);
+
+            if (!hasEmailSent)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private string GetPasswordRedefinitionCode()
         {
             var randomClass = new Random();
 

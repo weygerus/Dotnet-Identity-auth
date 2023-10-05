@@ -4,24 +4,17 @@ namespace Identity.App.Models
 {
     public class ForgotPasswordViewModel
     {
-
         [Required]
         [EmailAddress]
         public string? Email { get; set; }
 
-        public string? Name { get; set; }
+        public string? Message { get; set;}
 
-        public int Status { get; set;}
+        public string? ValidateCode { get; set; }
 
-        public string Message { get; set;}
+        [Compare("ValidateCode", ErrorMessage = "Código inválido!")]
+        public string? ValidateCodeTyped { get; set; }
 
-        public string PasswordRedefinition { get; set; } = "Validar";
-
-        public bool SuccessButton { get; set; }
-
-        public bool GetPasswordValidationCode(string email)
-        {
-            return true;
-        }
+        public bool HasEmailSent { get; set; }
     }
 }

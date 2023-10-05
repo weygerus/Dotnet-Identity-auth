@@ -2,9 +2,7 @@ using Identity.App.Data;
 using Identity.App.Models;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
-using Identity.App.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
@@ -16,8 +14,7 @@ var configuration = new ConfigurationBuilder()
 
 var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
 
-services.AddTransient<IDbConnectionInterface, DatabaseConnectionFactory>()
-        .AddTransient<IEmailSender, EmailSender>();
+services.AddTransient<IDbConnectionInterface, DatabaseConnectionFactory>();
 
 services.AddRazorPages();
 services.AddAuthentication();
@@ -53,7 +50,6 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
