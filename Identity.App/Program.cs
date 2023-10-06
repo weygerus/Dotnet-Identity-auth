@@ -1,5 +1,9 @@
+using Identity.App.Contract.Repositories;
+using Identity.App.Contract.Services;
 using Identity.App.Data;
 using Identity.App.Models;
+using Identity.App.Repositories;
+using Identity.App.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +18,9 @@ var configuration = new ConfigurationBuilder()
 
 var connectionString = configuration.GetConnectionString("DatabaseConnectionString");
 
-services.AddTransient<IDbConnectionInterface, DatabaseConnectionFactory>();
+services.AddTransient<IDbConnectionInterface, DatabaseConnectionFactory>()
+        .AddTransient<IAccountRepository, AccountRepository>()
+        .AddTransient<IEmailSender, EmailSender>();
 
 services.AddRazorPages();
 services.AddAuthentication();
