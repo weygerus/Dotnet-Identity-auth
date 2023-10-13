@@ -23,7 +23,7 @@
 
             <div class="form-group">
                 <div class="checkbox">
-                    <label class="small" asp-for="Rememberme" for="">
+                    <label asp-for="Rememberme" for="">
                         <input asp-for="Rememberme">
                         @Html.DisplayNameFor(x => x.Rememberme)
                     </label>
@@ -33,12 +33,15 @@
             <div class="form-group">
                 <div class="">
                     <label class="small" asp-for="ForgotPassword" for="">
-                        <a asp-controller="Account" asp-action="ForgotPassword" type="submit">Esqueci Minha senha</a>
+                        <a class="text-primary" asp-controller="Account" asp-action="ForgotPassword" type="submit">
+                            Esqueci Minha senha
+                        </a>
                     </label>
                 </div>
             </div>
 
             <button class="btn btn-primary" type="submit">Entrar</button>
+
         </form>
     </div>
 </div>

@@ -6,18 +6,20 @@ namespace Identity.App.Services
 {
     public class EmailSender : IEmailSender
     {
-        public async Task<bool> SetEmailSend(string? userEmail, string messageSubject, string validationCode)
+        public async Task<bool> SetConfirmationEmailSend(string userEmail, string returnUrl)
         {
             var sendGridApiKey = Environment.GetEnvironmentVariable("IDENTITY_APP_KEY_API", EnvironmentVariableTarget.User);
+
+            var messageSubject = "Confirm your account";
+
+            var messageBodyText = "Please confirm your account by clicking <a href=\"" + returnUrl + "\">here</a>";
 
             var messageBody = @$"
 
                 <div>
                     <div>
-                        <h3>Recuperação de senha</h3>
-                        <p>Aqui está o seu código de recuperação de senha:{validationCode}</p>
-                        <p>Link para a redefinição:</p>
-                        <p>https://localhost:7057/Account/PasswordRedefinition</p>
+                        <h3>Criação de usúario IdentityApp</h3>
+                        <p>{messageBodyText}</p>
                     </div>
                 </div>
 

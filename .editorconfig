@@ -14,3 +14,12 @@ dotnet_diagnostic.IDE0008.severity = none
 
 # CS8604: Possível argumento de referência nula.
 dotnet_diagnostic.CS8604.severity = none
+
+# CA2200: Gerar novamente para preservar detalhes da pilha
+dotnet_diagnostic.CA2200.severity = none
+
+# CS1718: Comparação feita com a mesma variável
+dotnet_diagnostic.CS1718.severity = none
+
+# Default severity for all analyzer diagnostics
+dotnet_analyzer_diagnostic.severity = none

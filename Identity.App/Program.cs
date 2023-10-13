@@ -87,7 +87,7 @@ app.MapControllerRoute(
 
 app.MapControllerRoute(
      name: "default",
-     pattern: "{controller=Account}/{action=PasswordRedefinition}"
+     pattern: "{controller=Account}/{action=ValidateCode}"
     );
 
 app.MapControllerRoute(

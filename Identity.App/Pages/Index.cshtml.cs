@@ -7,6 +7,8 @@ namespace Identity.App.Pages
     {
         private readonly ILogger<IndexModel> _logger;
 
+        public string? message { get; set; }
+
         public IndexModel(ILogger<IndexModel> logger)
         {
             _logger = logger;

@@ -18,5 +18,7 @@ namespace Identity.App.Models
         [DataType(DataType.Password)]
         [Compare("Password", ErrorMessage = "As senhas precisam ser iguais!")]
         public string ConfirmPassword { get; set; }
+
+        public string? Message { get; set; }
     }
 }

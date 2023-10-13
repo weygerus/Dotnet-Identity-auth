@@ -2,6 +2,6 @@
 {
     public interface IEmailSender
     {
-        public Task<bool> SetEmailSend(string? userEmail, string messageSubject, string validationCode);
+        public Task<bool> SetConfirmationEmailSend(string userEmail, string returnUrl);
     }
 }
