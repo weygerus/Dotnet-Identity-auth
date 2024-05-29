@@ -1,9 +1,9 @@
 App teste para implementação de autenticação e autorização com a bibliteca .NET Identity, incluindo:
 
 Registro e login de usuários;
-Autenticação com provedores externos;
-Gerenciamento e listagem de usuários;
-Controles de acesso da aplicação com base em roles.
+autenticação com provedores externos;
+gerenciamento e listagem de usuários;
+controles de acesso da aplicação com base em roles.
 
 Tecnologias:
 
